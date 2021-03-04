@@ -12,7 +12,7 @@
             "iso_checksum": "file:{{user `centos8_sha256sum_url`}}",
             "boot_command": [
                 "<up><tab> ",
-                "inst.ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/centos8.ks ",
+                "inst.ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/fedora33.ks ",
                 "console=ttyS0 inst.cmdline",
                 "<enter>"
             ],

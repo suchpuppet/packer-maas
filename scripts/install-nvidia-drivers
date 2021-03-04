@@ -1,0 +1,81 @@
+#!/bin/bash
+
+# Get which distro we're doing
+while getopts ":hd" opt; do
+  case ${opt} in
+    h ) # process option h
+      echo "Usage: install-nvidia-drivers -d [distro_name]
+        Supported distributions are:
+          centos7
+          centos8
+          ubuntu
+      "
+      ;;
+    d ) # process option t
+      distro=$OPTARG
+      ;;
+    \? ) # Show help
+      echo "Usage: install-nvidia-drivers -d [distro_name]
+        Supported distributions are:
+          centos7
+          centos8
+          ubuntu
+      "
+      ;;
+    : )
+      echo "Invalid option: ${OPTARG}.  Command requires option -d [distro_name]" 1>&2
+      exit 1
+      ;;
+  esac
+  shift $((OPTIND -1))
+done
+
+nvidia_post_install () {
+  cuda_version=$( ls /usr/local/cuda* )
+  echo "#!/bin/bash
+export PATH=/usr/local/${cuda_version}/bin${PATH:+:${PATH}}
+export LD_LIBRARY_PATH=/usr/local/${cuda_version}/lib64 ${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+" > /etc/profile.d/cuda.sh
+  systemctl enable nvidia-persistenced
+}
+
+case $distro in
+  centos7 )
+    dnf install -y tar bzip2 make automake gcc gcc-c++ pciutils elfutilslibelf-devel libglvnd-devel iptables firewalld vim bind-utils wget epel-release
+    distribution=rhel7
+    ARCH=$( /bin/arch )
+    yum-config-manager --add-repo http://developer.download.nvidia.com/compute/cuda/repos/$distribution/${ARCH}/cuda-$distribution.repo
+    yum install -y kernel-devel-$(uname -r) kernel-headers-$(uname -r)
+    yum clean expire-cache
+    yum install -y nvidia-driver-latest-dkms
+    nvidia_post_install
+    ;;
+  centos8 )
+    dnf install -y tar bzip2 make automake gcc gcc-c++ pciutils elfutilslibelf-devel libglvnd-devel
+    dnf config-manager --set-enabled PowerTools
+    dnf install -y epel-release
+    distribution=rhel8
+    ARCH=$( /bin/arch )
+    dnf config-manager --add-repo http://developer.download.nvidia.com/compute/cuda/repos/$distribution/${ARCH}/cuda-$distribution.repo
+    dnf install -y kernel-devel-$(uname -r) kernel-headers-$(uname -r)
+    dnf install -y kernel kernel-core kernel-modules
+    dnf clean all
+    dnf module install nvidia-driver:latest-dkms/ks
+    nvidia_post_install
+    ;;
+  ubuntu )
+    apt-get update
+    apt-get install -y linux-headers-$(uname -r)
+    distribution=$(. /etc/os-release;echo $ID$VERSION_ID | sed -e 's/\.//g')
+    wget https://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64/cuda-$distribution.pin
+    mv cuda-$distribution.pin /etc/apt/preferences.d/cuda-repositorypin-600
+    apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64/7fa2af80.pub
+    echo "deb http://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64 /" | tee /etc/apt/sources.list.d/cuda.list
+    apt-get update
+    apt-get -y install cuda-drivers
+    nvidia_post_install
+    ;;
+  : )
+    echo "Invalid distro: ${distro}. Supported distros are: centos7, centos8, ubuntu18.04, ubuntu20.04" 1>&2
+    exit 1
+esac
